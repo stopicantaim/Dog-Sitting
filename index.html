@@ -9,16 +9,19 @@
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
-  --bg:#f6f7f9;--bg2:#eef0f4;--card:#fff;--card2:#f8f9fb;
-  --border:#e2e5ea;--border2:#cfd4dc;
-  --text:#16181d;--sub:#6b7280;--mute:#d7dbe2;
-  --ac:#7c5cff;--ac2:#6844f5;--ac-bg:#f1edff;--ac-bd:#d9cfff;
-  --ok:#0e9f6e;--ok-bg:#e6f6ef;--warn:#b45309;--warn-bg:#fdf3e3;--bad:#dc2626;--bad-bg:#fdecec;
-  --r:14px;--rs:10px;
+  --bg:#f7f8fa;--bg2:#eef0f4;--card:#fff;--card2:#f9fafb;
+  --border:#e4e7ec;--border2:#d0d5dd;
+  --text:#101828;--sub:#667085;--mute:#d0d5dd;
+  --ac:#1c3d5a;--ac2:#16324a;--ac-bg:#eef3f8;--ac-bd:#c3d4e4;
+  --ok:#067647;--ok-bg:#ecfdf3;--warn:#b54708;--warn-bg:#fffaeb;
+  --bad:#b42318;--bad-bg:#fef3f2;
+  --r:10px;--rs:8px;
+  --sh:0 1px 2px rgba(16,24,40,.05);
 }
 html,body{background:var(--bg);color:var(--text);
-  font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',sans-serif;
-  font-size:15px;line-height:1.5;min-height:100dvh;overscroll-behavior:none}
+  font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',Inter,sans-serif;
+  font-size:15px;line-height:1.5;min-height:100dvh;overscroll-behavior:none;
+  -webkit-font-smoothing:antialiased}
 body{padding-bottom:calc(70px + env(safe-area-inset-bottom))}
 input,select,textarea,button{font-family:inherit}
 
@@ -26,8 +29,8 @@ input,select,textarea,button{font-family:inherit}
 .hdr{position:sticky;top:0;z-index:50;background:var(--bg);
   border-bottom:1px solid var(--border);padding:calc(10px + env(safe-area-inset-top)) 16px 10px}
 .hdr-in{display:flex;align-items:center;justify-content:space-between;gap:10px}
-.logo{font-size:17px;font-weight:900;letter-spacing:-.02em}
-.logo span{color:var(--ac)}
+.logo{font-size:15px;font-weight:800;letter-spacing:.01em;color:var(--text)}
+.logo span{display:none}
 .hdr-sub{font-size:11px;color:var(--sub);font-weight:600;margin-top:1px}
 
 /* tabs */
@@ -37,26 +40,29 @@ input,select,textarea,button{font-family:inherit}
 .tab{flex:1;background:none;border:none;color:var(--sub);cursor:pointer;
   font-size:10px;font-weight:700;padding:9px 2px 8px;display:flex;
   flex-direction:column;align-items:center;gap:3px;transition:color .15s}
-.tab .ico{font-size:19px;line-height:1}
+.tab .ico{display:block;height:20px}
+.tab svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.7;
+  stroke-linecap:round;stroke-linejoin:round}
+.tab.on svg{stroke-width:2}
 .tab.on{color:var(--ac)}
 .page{display:none;padding:14px 14px 20px}
 .page.on{display:block;animation:fade .25s ease}
 @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 
 /* generic */
-.sh{font-size:10px;font-weight:800;letter-spacing:.09em;color:var(--sub);
-  text-transform:uppercase;margin:18px 2px 8px}
+.sh{font-size:11px;font-weight:600;letter-spacing:.02em;color:var(--sub);
+  margin:20px 2px 9px}
 .sh:first-child{margin-top:2px}
-.card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:14px}
-.btn{width:100%;background:var(--ac);border:none;border-radius:var(--rs);color:#fff;
-  font-size:15px;font-weight:800;padding:13px;cursor:pointer;transition:transform .12s,opacity .15s}
-.btn:active{transform:scale(.985);opacity:.92}
-.btn.ghost{background:none;border:1px solid var(--border2);color:var(--sub)}
-.btn.danger{background:none;border:1px solid var(--bad);color:var(--bad)}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:15px;box-shadow:var(--sh)}
+.btn{width:100%;background:var(--ac);border:1px solid var(--ac);border-radius:var(--rs);color:#fff;
+  font-size:14px;font-weight:600;padding:12px;cursor:pointer;transition:opacity .15s;letter-spacing:.01em}
+.btn:active{opacity:.88}
+.btn.ghost{background:var(--card);border-color:var(--border2);color:var(--text)}
+.btn.danger{background:var(--card);border-color:var(--border2);color:var(--bad)}
 .btn.sm{padding:9px;font-size:13px}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-label.lbl{display:block;font-size:10px;font-weight:800;letter-spacing:.07em;
-  color:var(--sub);text-transform:uppercase;margin:12px 0 5px}
+label.lbl{display:block;font-size:11px;font-weight:600;letter-spacing:.01em;
+  color:var(--sub);margin:13px 0 5px}
 .in{width:100%;background:var(--card);border:1px solid var(--border2);border-radius:var(--rs);
   color:var(--text);padding:11px 12px;font-size:16px;outline:none;-webkit-appearance:none;
   transition:border-color .15s,box-shadow .18s}
@@ -64,8 +70,8 @@ label.lbl{display:block;font-size:10px;font-weight:800;letter-spacing:.07em;
 textarea.in{resize:vertical;min-height:64px;font-size:15px}
 .err{font-size:12px;color:var(--bad);min-height:15px;margin-top:6px}
 .empty{text-align:center;padding:26px 14px;color:var(--sub);font-size:13px;line-height:1.6}
-.pill{display:inline-block;font-size:9px;font-weight:800;letter-spacing:.05em;
-  padding:3px 8px;border-radius:99px;text-transform:uppercase}
+.pill{display:inline-block;font-size:10px;font-weight:600;letter-spacing:.02em;
+  padding:2px 8px;border-radius:5px;text-transform:capitalize;border:1px solid transparent}
 .pill.rover{background:var(--ac-bg);color:var(--ac2)}
 .pill.direct{background:var(--ok-bg);color:var(--ok)}
 .pill.paid{background:var(--ok-bg);color:var(--ok)}
@@ -77,28 +83,30 @@ textarea.in{resize:vertical;min-height:64px;font-size:15px}
 /* stat cards */
 .stats{display:grid;grid-template-columns:1fr 1fr;gap:9px}
 .stat{background:var(--card);border:1px solid var(--border);border-radius:var(--r);
-  padding:12px 13px;position:relative;overflow:hidden}
+  padding:13px 14px;position:relative;overflow:hidden;box-shadow:var(--sh)}
 .stat::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--ac)}
 .stat.ok::before{background:var(--ok)} .stat.warn::before{background:var(--warn)}
 .stat.mute::before{background:var(--border2)}
-.stat-l{font-size:9px;font-weight:800;letter-spacing:.08em;color:var(--sub);text-transform:uppercase}
-.stat-v{font-size:22px;font-weight:900;letter-spacing:-.02em;margin-top:3px;font-variant-numeric:tabular-nums}
+.stat-l{font-size:10px;font-weight:600;letter-spacing:.03em;color:var(--sub)}
+.stat-v{font-size:21px;font-weight:700;letter-spacing:-.025em;margin-top:4px;font-variant-numeric:tabular-nums}
 .stat-s{font-size:10px;color:var(--sub);margin-top:2px}
 
 /* list rows */
-.item{display:flex;align-items:center;gap:11px;background:var(--card);
-  border:1px solid var(--border);border-radius:var(--r);padding:12px 13px;
-  margin-bottom:8px;cursor:pointer;transition:transform .12s,border-color .15s}
-.item:active{transform:scale(.99);border-color:var(--ac)}
-.av{width:38px;height:38px;border-radius:50%;background:var(--ac-bg);color:var(--ac2);
-  display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:900;flex-shrink:0}
-.av.dog{background:var(--ok-bg);color:var(--ok);font-size:18px}
+.item{display:flex;align-items:center;gap:12px;background:var(--card);
+  border:1px solid var(--border);border-radius:var(--r);padding:13px 14px;
+  margin-bottom:7px;cursor:pointer;transition:background .15s,border-color .15s;box-shadow:var(--sh)}
+.item:active{background:var(--card2);border-color:var(--border2)}
+.av{width:36px;height:36px;border-radius:var(--rs);background:var(--ac-bg);color:var(--ac2);
+  display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;
+  flex-shrink:0;letter-spacing:.02em}
+.av.dog{background:var(--ac-bg);color:var(--ac2)}
+.av svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.8}
 .item-b{flex:1;min-width:0}
-.item-t{font-size:14px;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item-t{font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .item-s{font-size:11px;color:var(--sub);margin-top:1px;overflow:hidden;
   text-overflow:ellipsis;white-space:nowrap}
 .item-r{text-align:right;flex-shrink:0}
-.item-amt{font-size:14px;font-weight:900;font-variant-numeric:tabular-nums}
+.item-amt{font-size:14px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
 .item-sub{font-size:10px;color:var(--sub);margin-top:1px}
 
 /* sheet / modal */
@@ -160,11 +168,12 @@ textarea.in{resize:vertical;min-height:64px;font-size:15px}
 .neg{color:var(--bad)}
 
 /* fab */
-.fab{position:fixed;right:16px;bottom:calc(80px + env(safe-area-inset-bottom));z-index:55;
-  width:54px;height:54px;border-radius:50%;background:var(--ac);color:#fff;border:none;
-  font-size:27px;line-height:1;cursor:pointer;box-shadow:0 6px 20px rgba(124,92,255,.38);
-  transition:transform .15s}
-.fab:active{transform:scale(.92)}
+.fab{position:fixed;right:16px;bottom:calc(78px + env(safe-area-inset-bottom));z-index:55;
+  height:44px;padding:0 18px;border-radius:22px;background:var(--ac);color:#fff;border:none;
+  font-size:14px;font-weight:600;cursor:pointer;box-shadow:0 4px 14px rgba(28,61,90,.28);
+  display:flex;align-items:center;gap:7px;transition:opacity .15s}
+.fab:active{opacity:.9}
+.fab svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2.2}
 
 /* dog chips */
 .dogchips{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
@@ -187,26 +196,28 @@ textarea.in{resize:vertical;min-height:64px;font-size:15px}
   overflow:hidden;text-overflow:ellipsis}
 .toast.on{opacity:1;transform:translateX(-50%) scale(1)}
 .inv{background:var(--card);border:1px solid var(--border);border-radius:var(--r);
-  padding:16px;font-size:13px;line-height:1.7;white-space:pre-wrap;font-variant-numeric:tabular-nums}
+  padding:16px 14px;font-size:12px;line-height:1.65;white-space:pre;overflow-x:auto;
+  font-family:ui-monospace,SFMono-Regular,'SF Mono',Menlo,monospace;
+  color:var(--text);box-shadow:var(--sh)}
 </style>
 </head>
 <body>
 
 <div class="hdr"><div class="hdr-in">
-  <div><div class="logo">Pack<span>.</span></div>
+  <div><div class="logo" id="biz-name">Pack</div>
     <div class="hdr-sub" id="hdr-sub">Dog sitting</div></div>
   <div style="text-align:right"><div style="font-size:17px;font-weight:900" id="hdr-amt">$0</div>
-    <div class="hdr-sub">this month</div></div>
+    <div class="hdr-sub">Net this month</div></div>
 </div></div>
 
 <!-- HOME -->
 <section class="page on" id="p-home">
   <div class="stats" id="home-stats"></div>
-  <div class="sh">Happening now</div>
+  <div class="sh">In progress</div>
   <div id="home-active"></div>
-  <div class="sh">Coming up</div>
+  <div class="sh">Scheduled</div>
   <div id="home-upcoming"></div>
-  <div class="sh">Needs invoicing</div>
+  <div class="sh">Outstanding</div>
   <div id="home-unpaid"></div>
 </section>
 
@@ -250,7 +261,7 @@ textarea.in{resize:vertical;min-height:64px;font-size:15px}
     <div class="brk"><span class="brk-l">Mileage <span id="m-miles-n" style="opacity:.7"></span></span><span class="brk-v neg" id="m-miles">$0</span></div>
     <div class="brk total"><span class="brk-l">Take-home</span><span class="brk-v" id="m-net">$0</span></div>
   </div>
-  <div class="sh">By month</div>
+  <div class="sh">Monthly net</div>
   <div class="card" id="m-bars"></div>
   <div class="sh">Top clients</div>
   <div id="m-top"></div>
@@ -299,14 +310,14 @@ textarea.in{resize:vertical;min-height:64px;font-size:15px}
   <div style="text-align:center;font-size:11px;color:var(--sub);margin-top:16px">Pack · build <b id="build-tag"></b></div>
 </section>
 
-<button class="fab" id="fab">+</button>
+<button class="fab" id="fab"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg><span id="fab-l">New booking</span></button>
 
 <nav class="tabs">
-  <button class="tab on" data-tab="home"><span class="ico">🏠</span>Home</button>
-  <button class="tab" data-tab="clients"><span class="ico">🐕</span>Clients</button>
-  <button class="tab" data-tab="cal"><span class="ico">📅</span>Calendar</button>
-  <button class="tab" data-tab="money"><span class="ico">💵</span>Money</button>
-  <button class="tab" data-tab="set"><span class="ico">⚙️</span>Settings</button>
+  <button class="tab on" data-tab="home"><span class="ico"><svg viewBox="0 0 24 24"><path d="M3 10.5 12 4l9 6.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg></span>Home</button>
+  <button class="tab" data-tab="clients"><span class="ico"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0"/><path d="M16 5.5a3 3 0 0 1 0 5.6M17.5 20a5.4 5.4 0 0 0-2-4.2"/></svg></span>Clients</button>
+  <button class="tab" data-tab="cal"><span class="ico"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 9.5h17M8 3.5v3M16 3.5v3"/></svg></span>Schedule</button>
+  <button class="tab" data-tab="money"><span class="ico"><svg viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2"/><circle cx="12" cy="12" r="2.6"/><path d="M6 12h.01M18 12h.01"/></svg></span>Finances</button>
+  <button class="tab" data-tab="set"><span class="ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 7.1 19.4l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3 15H3a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 4.6 8.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 10 4.6V4a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0 1.1 2.7H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></svg></span>Settings</button>
 </nav>
 
 <div class="sheet-bg hidden" id="sheet"><div class="sheet">
@@ -419,7 +430,10 @@ document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>{
   if(t==="cal")renderCal();
   if(t==="money")renderMoney();
   if(t==="set")renderSet();
-  document.getElementById("fab").style.display = t==="money"||t==="set" ? "none":"";
+  const fab=document.getElementById("fab");
+  fab.style.display = (t==="money"||t==="set") ? "none":"";
+  const fl=document.getElementById("fab-l");
+  if(fl) fl.textContent = t==="clients" ? "New client" : "New booking";
 }));
 
 // ── HOME ───────────────────────────────────────────────────────────────
@@ -444,10 +458,10 @@ function renderHome(){
   const dogsToday=active.reduce((s,b)=>s+(b.dogIds?b.dogIds.length:0),0);
 
   document.getElementById("home-stats").innerHTML=
-    stat("This month",money(net),mb.length+" booking"+(mb.length===1?"":"s"),"")+
-    stat("Dogs today",String(dogsToday),active.length+" stay"+(active.length===1?"":"s"),"ok")+
+    stat("Net this month",money(net),mb.length+" booking"+(mb.length===1?"":"s"),"")+
+    stat("Dogs in care",String(dogsToday),active.length+" stay"+(active.length===1?"":"s"),"ok")+
     stat("Upcoming",String(upcoming.length),upcoming[0]?"next "+fmtD(upcoming[0].start):"nothing booked","mute")+
-    stat("Unpaid",money(unpaid.reduce((s,b)=>s+calc(b).net,0)),unpaid.length+" to invoice",unpaid.length?"warn":"mute");
+    stat("Outstanding",money(unpaid.reduce((s,b)=>s+calc(b).net,0)),unpaid.length+" to invoice",unpaid.length?"warn":"mute");
 
   document.getElementById("home-active").innerHTML =
     active.length ? active.map(bookingRow).join("")
@@ -469,7 +483,7 @@ function bookingRow(b){
   const dn=dogNames(b.dogIds);
   const rng=b.start===b.end?fmtD(b.start):fmtD(b.start)+" – "+fmtD(b.end);
   return '<div class="item" data-book="'+b.id+'">'+
-    '<div class="av dog">🐾</div><div class="item-b">'+
+    '<div class="av dog"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="15" rx="4.2" ry="3.4"/><ellipse cx="6.5" cy="10" rx="1.9" ry="2.4"/><ellipse cx="17.5" cy="10" rx="1.9" ry="2.4"/><ellipse cx="9.8" cy="6.4" rx="1.8" ry="2.2"/><ellipse cx="14.2" cy="6.4" rx="1.8" ry="2.2"/></svg></div><div class="item-b">'+
     '<div class="item-t">'+esc(c?c.name:"Unknown")+(dn?' · '+esc(dn):'')+'</div>'+
     '<div class="item-s">'+sv.n+' · '+rng+' · '+b.units+' '+sv.unit+(b.units===1?"":"s")+'</div>'+
     '</div><div class="item-r"><div class="item-amt">'+money(calc(b).net)+'</div>'+
@@ -566,7 +580,7 @@ function showClient(id){
 
   h+='<div class="sh">Dogs</div>';
   h+= ds.length ? ds.map(d=>
-      '<div class="item" data-dog="'+d.id+'"><div class="av dog">🐶</div><div class="item-b">'+
+      '<div class="item" data-dog="'+d.id+'"><div class="av dog"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="15" rx="4.2" ry="3.4"/><ellipse cx="6.5" cy="10" rx="1.9" ry="2.4"/><ellipse cx="17.5" cy="10" rx="1.9" ry="2.4"/><ellipse cx="9.8" cy="6.4" rx="1.8" ry="2.2"/><ellipse cx="14.2" cy="6.4" rx="1.8" ry="2.2"/></svg></div><div class="item-b">'+
       '<div class="item-t">'+esc(d.name)+'</div><div class="item-s">'+
       esc([d.breed,d.size,d.age].filter(Boolean).join(" · ")||"tap to add details")+'</div></div></div>').join("")
     : '<div class="empty">No dogs yet.</div>';
@@ -790,29 +804,48 @@ function showBooking(id){
 // ── INVOICE ────────────────────────────────────────────────────────────
 function makeInvoice(b){
   const c=clientOf(b.clientId), sv=SERVICES[b.service], m=calc(b);
-  const lines=[];
-  lines.push((biz.name||"Dog Sitting")+" — Invoice");
-  lines.push("Date: "+fmtDL(today()));
-  lines.push("");
-  lines.push("For: "+(c?c.name:"—"));
-  if(b.dogIds&&b.dogIds.length) lines.push("Dogs: "+dogNames(b.dogIds));
-  lines.push("");
-  lines.push(sv.n);
-  lines.push(fmtDL(b.start)+(b.start!==b.end?"  →  "+fmtDL(b.end):""));
-  lines.push(b.units+" "+sv.unit+(b.units===1?"":"s")+" × "+money(b.rate)+"  =  "+money(m.gross));
-  if(m.tip) lines.push("Tip: "+money(m.tip));
-  lines.push("");
-  lines.push("TOTAL DUE: "+money(m.gross+m.tip));
-  lines.push("");
-  if(biz.pay) lines.push("Payment: "+biz.pay);
-  if(biz.contact) lines.push("Questions: "+biz.contact);
-  lines.push("");
-  lines.push("Thank you!");
-  const txt=lines.join("\n");
-  openSheet("Invoice",
+  const total=m.gross+m.tip;
+  let refs=get("invRefs",{});
+  if(!refs[b.id]){
+    const n=(get("invSeq",0)||0)+1; set("invSeq",n);
+    refs[b.id]="INV-"+String(new Date().getFullYear()).slice(2)+"-"+String(n).padStart(4,"0");
+    set("invRefs",refs);
+  }
+  const ref=refs[b.id];
+  const dueD=new Date(); dueD.setDate(dueD.getDate()+7);
+  const due=dueD.toISOString().split("T")[0];
+  const rule="\u2500".repeat(34);
+  const L=[];
+  L.push((biz.name||"Dog Sitting Services").toUpperCase());
+  if(biz.contact) L.push(biz.contact);
+  L.push("");
+  L.push("INVOICE  "+ref);
+  L.push("Issued   "+fmtDL(today()));
+  L.push("Due      "+fmtDL(due));
+  L.push(rule);
+  L.push("BILL TO");
+  L.push(c?c.name:"\u2014");
+  if(c&&c.address) L.push(c.address);
+  if(c&&c.email) L.push(c.email);
+  if(c&&c.phone) L.push(c.phone);
+  L.push(rule);
+  L.push("SERVICES");
+  L.push(sv.n+(b.dogIds&&b.dogIds.length?" \u2014 "+dogNames(b.dogIds):""));
+  L.push(fmtDL(b.start)+(b.start!==b.end?"  to  "+fmtDL(b.end):""));
+  L.push("");
+  L.push(pad(b.units+" "+sv.unit+(b.units===1?"":"s")+" @ "+money(b.rate), money(m.gross)));
+  if(m.tip) L.push(pad("Gratuity", money(m.tip)));
+  L.push(rule);
+  L.push(pad("TOTAL DUE", money(total)));
+  L.push(rule);
+  if(biz.pay){ L.push(""); L.push("PAYMENT"); L.push(biz.pay); }
+  L.push("");
+  L.push("Thank you for trusting me with your dog"+(b.dogIds&&b.dogIds.length>1?"s":"")+".");
+  const txt=L.join("\n");
+  openSheet("Invoice "+ref,
     '<div class="inv" id="inv-txt">'+esc(txt)+'</div>'+
     '<button class="btn" id="inv-copy" style="margin-top:12px">Copy invoice</button>'+
-    '<button class="btn ghost" id="inv-share" style="margin-top:8px">Share</button>'+
+    '<button class="btn ghost" id="inv-share" style="margin-top:8px">Send</button>'+
     '<button class="btn ghost" id="inv-paid" style="margin-top:8px">Mark as paid</button>');
   document.getElementById("inv-copy").addEventListener("click",async()=>{
     try{
@@ -820,16 +853,20 @@ function makeInvoice(b){
       else{const t=document.createElement("textarea");t.value=txt;document.body.appendChild(t);
         t.select();document.execCommand("copy");t.remove()}
       toast("Invoice copied");
-    }catch(e){toast("Couldn't copy — select the text instead")}
+    }catch(e){toast("Couldn't copy \u2014 select the text instead")}
   });
   document.getElementById("inv-share").addEventListener("click",async()=>{
-    if(navigator.share){try{await navigator.share({title:"Invoice",text:txt})}catch(e){}}
-    else toast("Sharing isn't supported here — use Copy");
+    if(navigator.share){try{await navigator.share({title:"Invoice "+ref,text:txt})}catch(e){}}
+    else toast("Sharing isn't supported here \u2014 use Copy");
   });
   document.getElementById("inv-paid").addEventListener("click",()=>{
     b.paid=true; bookings=bookings.map(x=>x.id===b.id?b:x); set("bookings",bookings);
     closeSheet(); renderHome(); renderMoney(); toast("Marked paid");
   });
+}
+function pad(left,right){
+  const w=34, gap=Math.max(1, w-left.length-right.length);
+  return left+" ".repeat(gap)+right;
 }
 
 // ── CALENDAR ───────────────────────────────────────────────────────────
@@ -943,7 +980,7 @@ function renderMoney(){
     .sort((p,q)=>q.date.localeCompare(p.date)).slice(0,20);
   document.getElementById("exp-list").innerHTML= items.length
     ? items.map(i=>'<div class="item" data-'+(i.kind==="exp"?"exp":"trip")+'="'+i.id+'">'+
-        '<div class="av" style="background:var(--bad-bg);color:var(--bad)">'+(i.kind==="exp"?"💳":"🚗")+'</div>'+
+        '<div class="av" style="background:var(--bg2);color:var(--sub)">'+(i.kind==="exp"?"EXP":"MI")+'</div>'+
         '<div class="item-b"><div class="item-t">'+esc(i.kind==="exp"?(i.category||"Expense"):(i.purpose||"Drive"))+'</div>'+
         '<div class="item-s">'+fmtD(i.date)+(i.note?' · '+esc(i.note):'')+'</div></div>'+
         '<div class="item-r"><div class="item-amt neg">−'+
@@ -1037,7 +1074,10 @@ document.getElementById("save-biz").addEventListener("click",()=>{
   biz={name:document.getElementById("s-biz").value.trim(),
        contact:document.getElementById("s-contact").value.trim(),
        pay:document.getElementById("s-pay").value.trim()};
-  set("biz",biz); toast("Saved");
+  set("biz",biz);
+  const nEl=document.getElementById("biz-name");
+  if(nEl) nEl.textContent=biz.name||"Pack";
+  toast("Saved");
 });
 document.getElementById("exp-btn").addEventListener("click",()=>{
   try{
@@ -1085,8 +1125,10 @@ document.getElementById("fab").addEventListener("click",()=>{
     loadAll();
     renderHome(); renderCal(); renderSet();
     const n=clients.length+bookings.length;
+    const nameEl=document.getElementById("biz-name");
+    if(nameEl) nameEl.textContent = biz.name || "Pack";
     document.getElementById("hdr-sub").textContent =
-      n ? clients.length+" clients" : "Dog sitting";
+      clients.length ? clients.length+" client"+(clients.length===1?"":"s") : "Dog sitting";
   }catch(e){
     console.error("Boot error:",e);
     document.getElementById("home-stats").innerHTML=
