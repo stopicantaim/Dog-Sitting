@@ -219,6 +219,8 @@ textarea.in{resize:vertical;min-height:64px;font-size:15px}
   <div id="home-upcoming"></div>
   <div class="sh">Outstanding</div>
   <div id="home-unpaid"></div>
+  <div class="sh" id="followup-h" style="display:none">Worth a check-in</div>
+  <div id="home-followup"></div>
 </section>
 
 <!-- CLIENTS -->
@@ -472,6 +474,7 @@ function renderHome(){
   document.getElementById("home-unpaid").innerHTML =
     unpaid.length ? unpaid.map(bookingRow).join("")
     : '<div class="empty">Everything invoiced.</div>';
+  renderFollowUp();
   wireRows();
 }
 function stat(l,v,s,cls){
@@ -1041,6 +1044,97 @@ function addTrip(t){
 }
 document.getElementById("add-exp-btn").addEventListener("click",()=>addExpense());
 document.getElementById("add-trip-btn").addEventListener("click",()=>addTrip());
+
+
+// ── clients who haven't booked in a while ──────────────────────────────
+const FOLLOWUP_DAYS = 45;
+function daysSince(d){
+  const x=dnum(d); if(!x) return null;
+  return Math.floor((new Date().setHours(0,0,0,0)-x)/864e5);
+}
+function followUpClients(){
+  const t=today();
+  return clients.map(c=>{
+    const bs=bookings.filter(b=>b.clientId===c.id&&!b.cancelled);
+    if(!bs.length) return null;
+    // ignore anyone with a booking in progress or on the books
+    if(bs.some(b=>b.end>=t)) return null;
+    const last=bs.map(b=>b.end).sort().pop();
+    const gap=daysSince(last);
+    if(gap==null||gap<FOLLOWUP_DAYS) return null;
+    const sn=get("snoozed",{})[c.id];
+    if(sn && sn>today()) return null;
+    const spend=bs.reduce((s,b)=>s+calc(b).net,0);
+    return {c, last, gap, visits:bs.length, spend};
+  }).filter(Boolean).sort((a,b)=>b.spend-a.spend);
+}
+function renderFollowUp(){
+  const host=document.getElementById("home-followup");
+  const head=document.getElementById("followup-h");
+  if(!host) return;
+  const list=followUpClients();
+  head.style.display = list.length ? "" : "none";
+  if(!list.length){ host.innerHTML=""; return; }
+  host.innerHTML=list.slice(0,5).map(x=>
+    '<div class="item" data-follow="'+x.c.id+'">'+
+    '<div class="av">'+esc(x.c.name.charAt(0).toUpperCase())+'</div>'+
+    '<div class="item-b"><div class="item-t">'+esc(x.c.name)+'</div>'+
+    '<div class="item-s">Last stay '+fmtD(x.last)+' · '+x.visits+' booking'+(x.visits===1?"":"s")+
+      ' · '+money(x.spend)+' lifetime</div></div>'+
+    '<div class="item-r"><div class="item-amt">'+x.gap+'d</div>'+
+    '<div class="item-sub">since</div></div></div>').join("");
+  host.querySelectorAll("[data-follow]").forEach(el=>
+    el.addEventListener("click",()=>followUpSheet(el.dataset.follow)));
+}
+function followUpSheet(id){
+  const c=clientOf(id); if(!c) return;
+  const info=followUpClients().find(x=>x.c.id===id);
+  const ds=dogsOf(id);
+  const dog=ds.length?ds[0].name:null;
+  const msg="Hi "+c.name.split(" ")[0]+" — it's "+(biz.name||"your dog sitter")+". "+
+    (dog?"How's "+dog+"? ":"")+
+    "I've got some availability coming up if you need anything booked.";
+  let html='<div class="card" style="margin-bottom:12px">'+
+    '<div class="drow"><span class="drow-l">Last stay</span><span class="drow-v">'+
+      (info?fmtDL(info.last)+" ("+info.gap+" days ago)":"—")+'</span></div>'+
+    '<div class="drow"><span class="drow-l">Bookings</span><span class="drow-v">'+(info?info.visits:0)+'</span></div>'+
+    '<div class="drow"><span class="drow-l">Lifetime</span><span class="drow-v">'+(info?money(info.spend):"—")+'</span></div>'+
+    (ds.length?'<div class="drow"><span class="drow-l">Dogs</span><span class="drow-v">'+esc(ds.map(d=>d.name).join(", "))+'</span></div>':'')+
+    '</div>';
+  html+='<div class="sh">Suggested message</div>'+
+    '<div class="card"><div class="note" id="fu-msg">'+esc(msg)+'</div></div>';
+  if(c.phone) html+='<a class="btn" id="fu-text" style="margin-top:12px;display:block;text-align:center;text-decoration:none" href="#">Send text</a>';
+  html+='<button class="btn ghost" id="fu-copy" style="margin-top:8px">Copy message</button>';
+  html+='<button class="btn ghost" id="fu-open" style="margin-top:8px">Open client</button>';
+  html+='<button class="btn ghost" id="fu-snooze" style="margin-top:8px">Not now</button>';
+  openSheet(c.name, html);
+
+  const t=document.getElementById("fu-text");
+  if(t){
+    const tel=String(c.phone||"").replace(/[^0-9+]/g,"");
+    const sep=/iPhone|iPad|Macintosh/i.test(navigator.userAgent)?"&":"?";
+    t.href="sms:"+tel+sep+"body="+encodeURIComponent(msg);
+    t.addEventListener("click",()=>{ snooze(id); });
+  }
+  document.getElementById("fu-copy").addEventListener("click",async()=>{
+    try{
+      if(navigator.clipboard&&navigator.clipboard.writeText) await navigator.clipboard.writeText(msg);
+      else{const x=document.createElement("textarea");x.value=msg;document.body.appendChild(x);
+        x.select();document.execCommand("copy");x.remove()}
+      toast("Message copied");
+    }catch(e){toast("Couldn't copy")}
+  });
+  document.getElementById("fu-open").addEventListener("click",()=>showClient(id));
+  document.getElementById("fu-snooze").addEventListener("click",()=>{
+    snooze(id); closeSheet(); renderHome(); toast("Hidden for 30 days");
+  });
+}
+function snooze(id){
+  const s=get("snoozed",{});
+  const until=new Date(); until.setDate(until.getDate()+30);
+  s[id]=until.toISOString().split("T")[0];
+  set("snoozed",s);
+}
 
 // ── SETTINGS ───────────────────────────────────────────────────────────
 function renderSet(){
