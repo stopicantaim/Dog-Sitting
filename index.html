@@ -243,6 +243,30 @@ textarea.in{resize:vertical;min-height:64px;font-size:15px}
   .hdr-in,.tabs{max-width:900px}
   .fab{right:calc(50% - 450px + 18px)}
 }
+.pill.solo{background:var(--bad-bg);color:var(--bad)}
+.pill.careful{background:var(--warn-bg);color:var(--warn)}
+.cap{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.cap-tr{display:block;flex:1;height:8px;background:var(--bg2);border-radius:99px;overflow:hidden}
+.cap-fl{display:block;height:100%;background:var(--ok);border-radius:99px;transition:width .4s}
+.cap-fl.mid{background:var(--warn)} .cap-fl.full{background:var(--bad)}
+.cap-n{font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;flex-shrink:0}
+.warnbox{background:var(--warn-bg);border:1px solid #fedf89;border-radius:9px;
+  padding:10px 12px;font-size:12px;color:var(--warn);line-height:1.55;margin-top:10px}
+.warnbox.bad{background:var(--bad-bg);border-color:#fecdca;color:var(--bad)}
+.wd.over{border-color:var(--bad)}
+.wd.over .wd-b{background:var(--bad)}
+.cal-d.over{background:var(--bad-bg);border-color:#fecdca}
+.care-row{display:flex;justify-content:space-between;align-items:center;gap:10px;
+  padding:9px 0;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.care-row:last-child{border-bottom:none;padding-bottom:0}
+.care-dog{font-size:14px;font-weight:600}
+.care-owner{font-size:11px;color:var(--sub);font-weight:400;margin-left:7px}
+.care-btns{display:flex;gap:5px}
+.care-b{background:var(--card);border:1px solid var(--border2);border-radius:7px;
+  color:var(--sub);font-size:11px;font-weight:600;padding:6px 9px;cursor:pointer;
+  transition:all .15s;white-space:nowrap}
+.care-b.on{background:var(--ok-bg);border-color:var(--ok);color:var(--ok)}
+.care-b:active{transform:scale(.96)}
 </style>
 </head>
 <body>
@@ -257,6 +281,9 @@ textarea.in{resize:vertical;min-height:64px;font-size:15px}
 <!-- HOME -->
 <section class="page on" id="p-home">
   <div class="stats" id="home-stats"></div>
+
+  <div class="sh" id="care-h" style="display:none">Today in the house</div>
+  <div id="home-care"></div>
 
   <div class="sh">Next 7 days</div>
   <div class="week" id="home-week"></div>
@@ -343,6 +370,10 @@ textarea.in{resize:vertical;min-height:64px;font-size:15px}
       <div><label class="lbl">Daycare / day</label><input class="in" type="number" id="r-day"/></div>
       <div><label class="lbl">Rover cut %</label><input class="in" type="number" id="r-cut"/></div>
     </div>
+    <div class="row2" style="margin-top:10px">
+      <div><label class="lbl">Dogs the house can take</label><input class="in" type="number" id="r-cap"/></div>
+      <div></div>
+    </div>
     <label class="lbl">Mileage rate ($/mile)</label>
     <input class="in" type="number" step="0.01" id="r-mile"/>
     <button class="btn" id="save-set" style="margin-top:14px">Save</button>
@@ -408,7 +439,7 @@ document.addEventListener("visibilitychange",()=>{if(document.hidden)dbFlush()})
 
 // ── state ──────────────────────────────────────────────────────────────
 let clients=[], dogs=[], bookings=[], expenses=[], trips=[], settings={}, biz={};
-const DEF_SET={board:60,house:75,drop:25,walk:22,day:45,cut:20,mile:0.70};
+const DEF_SET={board:60,house:75,drop:25,walk:22,day:45,cut:20,mile:0.70,capacity:6};
 
 function loadAll(){
   dbLoad();
@@ -448,6 +479,34 @@ function calc(b){
   const tip=+b.tip||0;
   return {gross, fee, tip, net:gross-fee+tip};
 }
+// which services put a dog under your roof
+const HOME_SERVICES = ["board","day"];
+function occupiesHouse(b){ return HOME_SERVICES.includes(b.service); }
+
+// how many dogs are in the house on a given date
+function dogsHomeOn(iso, ignoreId){
+  return bookings.filter(b=>!b.cancelled && b.id!==ignoreId &&
+      occupiesHouse(b) && b.start<=iso && b.end>=iso)
+    .reduce((s,b)=>s+Math.max(1,(b.dogIds||[]).length),0);
+}
+function capacity(){ return Math.max(1, +settings.capacity || 6); }
+
+// every date a booking covers
+function datesOf(start,end){
+  const out=[]; const a=dnum(start), z=dnum(end);
+  if(!a||!z) return out;
+  for(let d=new Date(a); d<=z; d.setDate(d.getDate()+1))
+    out.push(d.toISOString().split("T")[0]);
+  return out;
+}
+// which days would be over capacity if this booking existed
+function overCapacityDays(b, ignoreId){
+  if(!occupiesHouse(b)) return [];
+  const add=Math.max(1,(b.dogIds||[]).length);
+  return datesOf(b.start,b.end)
+    .filter(d=> dogsHomeOn(d, ignoreId)+add > capacity());
+}
+
 function clientOf(id){return clients.find(c=>c.id===id)}
 function dogsOf(id){return dogs.filter(d=>d.clientId===id)}
 function dogNames(ids){
@@ -528,6 +587,7 @@ function renderHome(){
   document.getElementById("home-unpaid").innerHTML =
     unpaid.length ? unpaid.map(bookingRow).join("")
     : '<div class="empty">Everything invoiced.</div>';
+  renderCare();
   renderWeek();
   renderFollowUp();
   wireRows();
@@ -639,7 +699,7 @@ function showClient(id){
   h+='<div class="sh">Dogs</div>';
   h+= ds.length ? ds.map(d=>
       '<div class="item" data-dog="'+d.id+'"><div class="av dog"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="15" rx="4.2" ry="3.4"/><ellipse cx="6.5" cy="10" rx="1.9" ry="2.4"/><ellipse cx="17.5" cy="10" rx="1.9" ry="2.4"/><ellipse cx="9.8" cy="6.4" rx="1.8" ry="2.2"/><ellipse cx="14.2" cy="6.4" rx="1.8" ry="2.2"/></svg></div><div class="item-b">'+
-      '<div class="item-t">'+esc(d.name)+'</div><div class="item-s">'+
+      '<div class="item-t">'+esc(d.name)+tempPill(d)+'</div><div class="item-s">'+
       esc([d.breed,d.size,d.age].filter(Boolean).join(" · ")||"tap to add details")+'</div></div></div>').join("")
     : '<div class="empty">No dogs yet.</div>';
   h+='<button class="btn ghost sm" id="add-dog">Add a dog</button>';
@@ -658,6 +718,14 @@ function showClient(id){
   wireRows();
 }
 
+
+function tempPill(d){
+  if(!d) return "";
+  if(d.temperament==="solo") return ' <span class="pill solo">alone only</span>';
+  if(d.temperament==="careful") return ' <span class="pill careful">watch</span>';
+  return "";
+}
+
 // ── DOGS ───────────────────────────────────────────────────────────────
 function addDog(d,clientId){
   d=d||{}; const cid=d.clientId||clientId;
@@ -669,6 +737,11 @@ function addDog(d,clientId){
     '</div>'+
     '<label class="lbl">Feeding</label><textarea class="in" id="d-feed">'+esc(d.feeding||"")+'</textarea>'+
     '<label class="lbl">Medications</label><textarea class="in" id="d-meds">'+esc(d.meds||"")+'</textarea>'+
+    '<label class="lbl">With other dogs</label><div class="seg" id="d-temp">'+
+      [["easy","Fine with all"],["careful","Needs watching"],["solo","Must be alone"]]
+        .map(t=>'<button data-temp="'+t[0]+'"'+((d.temperament||"easy")===t[0]?' class="on"':'')+'>'+t[1]+'</button>').join("")+
+    '</div>'+
+    '<label class="lbl">Who they clash with</label><input class="in" id="d-compat" value="'+esc(d.compat||"")+'" placeholder="small dogs, intact males, food guarding"/>'+
     '<label class="lbl">Vet</label><input class="in" id="d-vet" value="'+esc(d.vet||"")+'"/>'+
     '<label class="lbl">Quirks &amp; notes</label><textarea class="in" id="d-notes">'+esc(d.notes||"")+'</textarea>'+
     '<div class="err" id="d-err"></div>'+
@@ -676,6 +749,11 @@ function addDog(d,clientId){
     (d.id?'<button class="btn danger" id="d-del" style="margin-top:8px">Delete dog</button>':'');
   openSheet(d.id?d.name:"New dog",h);
   let size=d.size||"Medium";
+  let temperament=d.temperament||"easy";
+  document.querySelectorAll("#d-temp button").forEach(b=>b.addEventListener("click",()=>{
+    temperament=b.dataset.temp;
+    document.querySelectorAll("#d-temp button").forEach(x=>x.classList.remove("on"));
+    b.classList.add("on")}));
   document.querySelectorAll("#d-size button").forEach(b=>b.addEventListener("click",()=>{
     size=b.dataset.size;
     document.querySelectorAll("#d-size button").forEach(x=>x.classList.remove("on"));
@@ -684,7 +762,8 @@ function addDog(d,clientId){
   document.getElementById("d-save").addEventListener("click",()=>{
     const name=document.getElementById("d-name").value.trim();
     if(!name){document.getElementById("d-err").textContent="Give the dog a name.";return}
-    const rec={id:d.id||uid("d"),clientId:cid,name,size,
+    const rec={id:d.id||uid("d"),clientId:cid,name,size,temperament,
+      compat:document.getElementById("d-compat").value.trim(),
       breed:document.getElementById("d-breed").value.trim(),
       age:document.getElementById("d-age").value.trim(),
       feeding:document.getElementById("d-feed").value.trim(),
@@ -735,6 +814,7 @@ function addBooking(b,clientId){
       '<button data-paid="1"'+(b.paid?' class="on"':'')+'>Paid</button>'+
       '<button data-paid="0"'+(b.paid?'':' class="on"')+'>Not yet</button></div></div></div>'+
     '<label class="lbl">Notes</label><textarea class="in" id="b-notes">'+esc(b.notes||"")+'</textarea>'+
+    '<div id="b-warn"></div>'+
     '<div class="card" style="margin-top:14px"><div id="b-preview"></div></div>'+
     '<div class="err" id="b-err"></div>'+
     '<button class="btn" id="b-save">'+(b.id?"Save booking":"Add booking")+'</button>'+
@@ -750,12 +830,12 @@ function addBooking(b,clientId){
     picked=picked.filter(i=>ds.some(d=>d.id===i));
     if(!ds.length && !picked.length) picked=[];
     document.getElementById("b-dogs").innerHTML = ds.length
-      ? ds.map(d=>'<div class="dogchip'+(picked.includes(d.id)?" on":"")+'" data-pick="'+d.id+'">'+esc(d.name)+'</div>').join("")
+      ? ds.map(d=>'<div class="dogchip'+(picked.includes(d.id)?" on":"")+'" data-pick="'+d.id+'">'+esc(d.name)+(d.temperament==="solo"?" ⚠":d.temperament==="careful"?" •":"")+'</div>').join("")
       : '<div style="font-size:12px;color:var(--sub)">No dogs saved for this client yet.</div>';
     document.querySelectorAll("[data-pick]").forEach(el=>el.addEventListener("click",()=>{
       const id=el.dataset.pick;
       picked=picked.includes(id)?picked.filter(x=>x!==id):picked.concat(id);
-      renderDogPicks();
+      renderDogPicks(); preview();
     }));
   }
   function autoUnits(){
@@ -768,11 +848,62 @@ function addBooking(b,clientId){
     }
     preview();
   }
+  function checkClash(){
+    const box=document.getElementById("b-warn");
+    if(!box) return;
+    const start=document.getElementById("b-start").value;
+    const end=document.getElementById("b-end").value;
+    const draft={service, start, end, dogIds:picked, id:b.id};
+    let html="";
+
+    // capacity
+    if(occupiesHouse(draft) && start && end && end>=start){
+      const over=overCapacityDays(draft, b.id);
+      const add=Math.max(1,picked.length);
+      const peak=Math.max(0,...datesOf(start,end).map(d=>dogsHomeOn(d,b.id)));
+      if(over.length){
+        html+='<div class="warnbox bad"><b>Over capacity.</b> '+
+          over.length+' day'+(over.length===1?"":"s")+' would exceed your limit of '+
+          capacity()+' dogs — first is '+fmtD(over[0])+'.</div>';
+      } else if(start&&end){
+        html+='<div class="cap"><span class="cap-n">House</span>'+
+          '<span class="cap-tr"><span class="cap-fl'+
+            ((peak+add)>=capacity()?" full":(peak+add)>=capacity()-1?" mid":"")+
+            '" style="width:'+Math.min(100,(peak+add)/capacity()*100)+'%"></span></span>'+
+          '<span class="cap-n">'+(peak+add)+'/'+capacity()+'</span></div>';
+      }
+    }
+
+    // temperament clashes with dogs already booked over the same dates
+    if(occupiesHouse(draft) && start && end && end>=start){
+      const days=datesOf(start,end);
+      const otherIds=new Set();
+      bookings.filter(x=>!x.cancelled && x.id!==b.id && occupiesHouse(x) &&
+          days.some(d=>x.start<=d&&x.end>=d))
+        .forEach(x=>(x.dogIds||[]).forEach(i=>otherIds.add(i)));
+      const mine=picked.map(i=>dogs.find(d=>d.id===i)).filter(Boolean);
+      const others=[...otherIds].map(i=>dogs.find(d=>d.id===i)).filter(Boolean);
+      const solos=mine.concat(others).filter(d=>d.temperament==="solo");
+      const careful=mine.concat(others).filter(d=>d.temperament==="careful");
+      if(solos.length && (mine.length+others.length)>1){
+        html+='<div class="warnbox bad"><b>'+esc(solos.map(d=>d.name).join(", "))+
+          '</b> needs to be alone, but other dogs are booked over these dates.</div>';
+      } else if(careful.length && others.length){
+        const notes=careful.filter(d=>d.compat).map(d=>d.name+": "+d.compat);
+        html+='<div class="warnbox"><b>Watch the mix.</b> '+
+          esc(careful.map(d=>d.name).join(", "))+' needs supervision'+
+          (notes.length?' — '+esc(notes.join("; ")):'')+'.</div>';
+      }
+    }
+    box.innerHTML=html;
+  }
+
   function preview(){
     const tmp={units:+document.getElementById("b-units").value||0,
                rate:+document.getElementById("b-rate").value||0,
                tip:+document.getElementById("b-tip").value||0, platform};
     const c=calc(tmp);
+    checkClash();
     document.getElementById("b-preview").innerHTML=
       '<div class="brk"><span class="brk-l">Gross</span><span class="brk-v">'+money(c.gross)+'</span></div>'+
       (platform==="rover"?'<div class="brk"><span class="brk-l">Rover fee '+settings.cut+'%</span><span class="brk-v neg">−'+money(c.fee)+'</span></div>':'')+
@@ -809,6 +940,10 @@ function addBooking(b,clientId){
     if(end<start){err.textContent="End date is before the start date.";return}
     if(!(units>0)){err.textContent="Units must be at least 1.";return}
     if(!(rate>=0)){err.textContent="Rate can't be negative.";return}
+    const draft={service,start,end,dogIds:picked,id:b.id};
+    const over=overCapacityDays(draft,b.id);
+    if(over.length && !confirm("This puts you over "+capacity()+" dogs on "+
+        over.length+" day"+(over.length===1?"":"s")+". Save anyway?")) return;
     const rec={id:b.id||uid("b"),clientId:document.getElementById("b-client").value,
       dogIds:picked,service,start,end,units,rate,platform,paid,
       tip:+document.getElementById("b-tip").value||0,
@@ -942,7 +1077,8 @@ function renderCal(){
     const iso=d.toISOString().split("T")[0];
     const other=d.getMonth()!==calM;
     const has=bookings.some(b=>!b.cancelled&&b.start<=iso&&b.end>=iso);
-    const cls=["cal-d",other?"other":"",iso===today()?"today":"",has?"has":"",iso===calSel?"sel":""]
+    const over=dogsHomeOn(iso)>capacity();
+    const cls=["cal-d",other?"other":"",iso===today()?"today":"",has?"has":"",over?"over":"",iso===calSel?"sel":""]
       .filter(Boolean).join(" ");
     html+='<div class="'+cls+'" data-day="'+iso+'">'+d.getDate()+(has?'<span class="dot"></span>':'')+'</div>';
   }
@@ -951,7 +1087,9 @@ function renderCal(){
     calSel=el.dataset.day; renderCal();
   }));
   const list=bookings.filter(b=>!b.cancelled&&b.start<=calSel&&b.end>=calSel);
-  document.getElementById("cal-day-lbl").textContent=fmtDL(calSel);
+  const homeN=dogsHomeOn(calSel);
+  document.getElementById("cal-day-lbl").textContent=
+    fmtDL(calSel)+(homeN?"  ·  "+homeN+"/"+capacity()+" in the house":"");
   document.getElementById("cal-day-list").innerHTML=
     list.length?list.map(bookingRow).join("")
     :'<div class="empty">Nothing booked. Tap + to add.</div>';
@@ -1102,6 +1240,55 @@ document.getElementById("add-trip-btn").addEventListener("click",()=>addTrip());
 
 
 
+
+// ── today's care checklist ─────────────────────────────────────────────
+const CARE_TASKS=[["am","Fed AM"],["pm","Fed PM"],["walk","Walked"],["meds","Meds"]];
+function renderCare(){
+  const host=document.getElementById("home-care");
+  const head=document.getElementById("care-h");
+  if(!host) return;
+  const t=today();
+  const stays=bookings.filter(b=>!b.cancelled&&occupiesHouse(b)&&b.start<=t&&b.end>=t);
+  const here=[];
+  stays.forEach(b=>(b.dogIds||[]).forEach(id=>{
+    const d=dogs.find(x=>x.id===id);
+    if(d) here.push({dog:d, client:clientOf(b.clientId)});
+  }));
+  if(!here.length){ head.style.display="none"; host.innerHTML=""; return; }
+  head.style.display="";
+
+  const log=get("care",{})[t]||{};
+  const cap=capacity(), n=here.length;
+  const pct=Math.min(100,n/cap*100);
+
+  host.innerHTML=
+    '<div class="card">'+
+      '<div class="cap"><span class="cap-n">'+n+' of '+cap+'</span>'+
+      '<span class="cap-tr"><span class="cap-fl'+(n>=cap?" full":n>=cap-1?" mid":"")+
+        '" style="width:'+pct+'%"></span></span>'+
+      '<span class="cap-n">'+(cap-n)+' free</span></div>'+
+      here.map(x=>{
+        const l=log[x.dog.id]||{};
+        return '<div class="care-row"><div class="care-dog">'+esc(x.dog.name)+
+          tempPill(x.dog)+
+          '<span class="care-owner">'+esc(x.client?x.client.name:"")+'</span></div>'+
+          '<div class="care-btns">'+CARE_TASKS.map(t2=>
+            '<button class="care-b'+(l[t2[0]]?" on":"")+'" data-dog="'+x.dog.id+
+            '" data-task="'+t2[0]+'">'+t2[1]+'</button>').join("")+'</div></div>';
+      }).join("")+
+    '</div>';
+
+  host.querySelectorAll("[data-task]").forEach(btn=>btn.addEventListener("click",()=>{
+    const all=get("care",{});
+    if(!all[t]) all[t]={};
+    const id=btn.dataset.dog, task=btn.dataset.task;
+    if(!all[t][id]) all[t][id]={};
+    all[t][id][task]=!all[t][id][task];
+    set("care",all);
+    btn.classList.toggle("on", all[t][id][task]);
+  }));
+}
+
 // ── next seven days at a glance ────────────────────────────────────────
 function renderWeek(){
   const host=document.getElementById("home-week");
@@ -1114,7 +1301,9 @@ function renderWeek(){
     const n=bookings.filter(b=>!b.cancelled&&b.start<=iso&&b.end>=iso).length;
     const dogs=bookings.filter(b=>!b.cancelled&&b.start<=iso&&b.end>=iso)
       .reduce((s,b)=>s+((b.dogIds||[]).length||1),0);
-    html+='<div class="wd'+(i===0?" today":"")+'" data-wd="'+iso+'">'+
+    const home=dogsHomeOn(iso);
+    const over=home>capacity();
+    html+='<div class="wd'+(i===0?" today":"")+(over?" over":"")+'" data-wd="'+iso+'">'+
       '<div class="wd-n">'+d.toLocaleDateString("en-US",{weekday:"short"}).slice(0,2)+'</div>'+
       '<div class="wd-d">'+d.getDate()+'</div>'+
       '<div class="wd-c">'+(n?'<span class="wd-b">'+dogs+'</span>':'<span class="wd-e"></span>')+'</div>'+
@@ -1228,6 +1417,7 @@ function renderSet(){
   document.getElementById("r-day").value=settings.day;
   document.getElementById("r-cut").value=settings.cut;
   document.getElementById("r-mile").value=settings.mile;
+  document.getElementById("r-cap").value=settings.capacity;
   document.getElementById("s-biz").value=biz.name||"";
   document.getElementById("s-contact").value=biz.contact||"";
   document.getElementById("s-pay").value=biz.pay||"";
@@ -1244,8 +1434,9 @@ document.getElementById("save-set").addEventListener("click",()=>{
     drop:+document.getElementById("r-drop").value||0,
     walk:+document.getElementById("r-walk").value||0,
     day:+document.getElementById("r-day").value||0,
-    cut:cut, mile:+document.getElementById("r-mile").value||0};
-  set("settings",settings); renderMoney(); toast("Rates saved");
+    cut:cut, mile:+document.getElementById("r-mile").value||0,
+    capacity:Math.max(1,+document.getElementById("r-cap").value||6)};
+  set("settings",settings); renderMoney(); renderHome(); toast("Settings saved");
 });
 document.getElementById("save-biz").addEventListener("click",()=>{
   biz={name:document.getElementById("s-biz").value.trim(),
