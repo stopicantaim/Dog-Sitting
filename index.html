@@ -1637,7 +1637,7 @@ function accountSheet(){
       '<div class="drow"><span class="drow-l">Last sync</span><span class="drow-v">'+
         (lastSync?new Date(lastSync).toLocaleTimeString():"—")+'</span></div>'+
     '</div>'+
-    (hh.code?'<div class="note">Share the join code with your brother. He signs up on his own phone, taps <b>Join a business</b> and enters it — you then both see the same clients and bookings.</div>':'')+
+    (hh.code?'<div class="note">Share this code with anyone else who works with you. They create their own account on their own phone, tap <b>Join a business</b> and enter the code — everyone then sees the same clients and bookings.</div>':'')+
     '<button class="btn" id="ac-sync" style="margin-top:12px">Sync now</button>'+
     '<button class="btn ghost" id="ac-out" style="margin-top:8px">Sign out</button>');
   document.getElementById("ac-sync").addEventListener("click",async()=>{
@@ -1653,7 +1653,7 @@ function accountSheet(){
 function signInSheet(mode){
   mode = mode || "in";
   openSheet(mode==="in"?"Sign in":"Create account",
-    '<label class="lbl">Your name</label><input class="in" id="au-name" placeholder="Dillon" '+
+    '<label class="lbl">Your name</label><input class="in" id="au-name" placeholder="Your name" '+
       (mode==="in"?'style="display:none"':'')+'/>'+
     '<label class="lbl">Email</label><input class="in" type="email" id="au-email" autocomplete="email"/>'+
     '<label class="lbl">Password</label><input class="in" type="password" id="au-pass" autocomplete="current-password"/>'+
@@ -1692,10 +1692,10 @@ function signInSheet(mode){
 
 function householdSheet(name){
   openSheet("Set up your business",
-    '<div class="note" style="margin-bottom:14px">If your brother has already set this up, '+
-    'ask him for the join code. Otherwise start a new one.</div>'+
+    '<div class="note" style="margin-bottom:14px">If someone has already set this up, '+
+    'ask them for the join code. Otherwise start a new one.</div>'+
     '<label class="lbl">Business name</label>'+
-    '<input class="in" id="hh-name" value="'+esc((get("biz",{})||{}).name||"Dillon Dog Sitting")+'"/>'+
+    '<input class="in" id="hh-name" value="'+esc((get("biz",{})||{}).name||"My dog sitting business")+'"/>'+
     '<button class="btn" id="hh-new" style="margin-top:12px">Start a new business</button>'+
     '<div class="divider" style="margin:18px 0"></div>'+
     '<label class="lbl">Or join with a code</label>'+
@@ -1767,8 +1767,8 @@ function renderSet(){
   document.getElementById("build-tag").textContent=BUILD;
   const si=document.getElementById("sync-info");
   if(si){
-    if(!cloudOn()) si.textContent="Saved on this device only. Add your Supabase keys to sync between phones.";
-    else if(!USER) si.textContent="Sign in to sync with your brother's phone.";
+    if(!cloudOn()) si.textContent="Saved on this device only. Add your Supabase keys to sync across devices.";
+    else if(!USER) si.textContent="Sign in to sync across your devices.";
     else {
       const hh=get("_household",{});
       si.innerHTML="Signed in as "+esc(USER.email||"")+"<br>Business: "+esc(hh.name||"—")+
