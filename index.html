@@ -267,6 +267,12 @@ textarea.in{resize:vertical;min-height:64px;font-size:15px}
   transition:all .15s;white-space:nowrap}
 .care-b.on{background:var(--ok-bg);border-color:var(--ok);color:var(--ok)}
 .care-b:active{transform:scale(.96)}
+.sync{margin-top:4px;border:1px solid var(--border2);background:var(--card);
+  border-radius:99px;font-size:10px;font-weight:600;padding:3px 9px;cursor:pointer;
+  color:var(--sub);font-family:inherit}
+.sync.ok{background:var(--ok-bg);border-color:#a6f4c5;color:var(--ok)}
+.sync.busy{background:var(--warn-bg);border-color:#fedf89;color:var(--warn)}
+.sync.off{background:var(--bg2)}
 </style>
 </head>
 <body>
@@ -274,8 +280,11 @@ textarea.in{resize:vertical;min-height:64px;font-size:15px}
 <div class="hdr"><div class="hdr-in">
   <div><div class="logo" id="biz-name">Pack</div>
     <div class="hdr-sub" id="hdr-sub">Dog sitting</div></div>
-  <div style="text-align:right"><div style="font-size:17px;font-weight:900" id="hdr-amt">$0</div>
-    <div class="hdr-sub">Net this month</div></div>
+  <div style="text-align:right">
+    <div style="font-size:17px;font-weight:900" id="hdr-amt">$0</div>
+    <div class="hdr-sub">Net this month</div>
+    <button class="sync off" id="sync-badge" style="display:none">Sign in</button>
+  </div>
 </div></div>
 
 <!-- HOME -->
@@ -386,6 +395,12 @@ textarea.in{resize:vertical;min-height:64px;font-size:15px}
     <input class="in" id="s-pay" placeholder="Venmo @handle · Cash · Zelle"/>
     <button class="btn" id="save-biz" style="margin-top:14px">Save</button>
   </div>
+  <div class="sh">Account &amp; sync</div>
+  <div class="card">
+    <div style="font-size:12px;color:var(--sub);line-height:1.6;margin-bottom:11px" id="sync-info"></div>
+    <button class="btn" id="acct-btn">Manage account</button>
+  </div>
+
   <div class="sh">Data</div>
   <div class="card">
     <div style="font-size:12px;color:var(--sub);line-height:1.6;margin-bottom:11px" id="db-info"></div>
@@ -413,8 +428,29 @@ textarea.in{resize:vertical;min-height:64px;font-size:15px}
 </div></div>
 
 <div class="toast" id="toast"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 const BUILD="2026.08.20";
+
+/* ═══════════════════════════════════════════════════════════════
+   CLOUD SYNC — paste your two Supabase values here.
+   Leave them blank and the app works exactly as before, on this
+   device only. Setup takes about five minutes, see SETUP.md.
+   ═══════════════════════════════════════════════════════════════ */
+const SUPABASE_URL = "";
+const SUPABASE_KEY = "";
+/* ═══════════════════════════════════════════════════════════════ */
+
+let sb = null, USER = null, HOUSEHOLD = null;
+let syncing = false, lastSync = null, online = navigator.onLine;
+try{
+  if(SUPABASE_URL && SUPABASE_KEY && typeof supabase !== "undefined"){
+    sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+      auth:{persistSession:true, autoRefreshToken:true, storageKey:"pack-auth"}
+    });
+  }
+}catch(e){ console.warn("Supabase unavailable — running locally", e); }
+const cloudOn = () => !!sb;
 const DB_KEY="pack.db", DB_V=1;
 let DB=null, suppressFlush=false;
 
@@ -436,6 +472,146 @@ const set=(k,v)=>{if(!DB)dbLoad();DB.data[k]=v;dbFlush()};
 addEventListener("pagehide",dbFlush);
 addEventListener("beforeunload",dbFlush);
 document.addEventListener("visibilitychange",()=>{if(document.hidden)dbFlush()});
+
+
+// ═══════════════════════════════════════════════════════════════════════
+//  SYNC ENGINE — local-first
+//  Every change is written to localStorage immediately and queued.
+//  The queue drains whenever there's a connection. Nothing waits on
+//  the network, so the app works the same in a basement.
+// ═══════════════════════════════════════════════════════════════════════
+
+// which local collections map to which record kind
+const SYNCED = {
+  clients:"client", dogs:"dog", bookings:"booking",
+  expenses:"expense", trips:"trip"
+};
+const SINGLETONS = ["settings","biz","care","snoozed","invRefs","invSeq"];
+
+function queue(){ return get("_queue", []); }
+function enqueue(kind, id, data, deleted){
+  const q = queue().filter(x=>!(x.kind===kind && x.id===id));
+  q.push({kind, id, data, deleted:!!deleted, at:Date.now()});
+  set("_queue", q.slice(-500));
+  scheduleSync();
+}
+
+// mark a record changed — called from every save path
+function touch(collection, rec, deleted){
+  if(!cloudOn() || !HOUSEHOLD) return;
+  const kind = SYNCED[collection];
+  if(!kind) return;
+  enqueue(kind, rec.id, rec, deleted);
+}
+function touchSingleton(key){
+  if(!cloudOn() || !HOUSEHOLD) return;
+  enqueue("setting", key, {key, value:get(key, null)}, false);
+}
+
+let syncTimer=null;
+function scheduleSync(delay){
+  clearTimeout(syncTimer);
+  syncTimer=setTimeout(()=>syncNow().catch(()=>{}), delay==null?800:delay);
+}
+
+async function syncNow(){
+  if(!cloudOn() || !USER || !HOUSEHOLD || syncing || !navigator.onLine) return;
+  syncing = true; renderSyncBadge();
+  try{
+    await pushQueue();
+    await pullChanges();
+    lastSync = Date.now();
+    set("_lastSync", lastSync);
+  }catch(e){
+    console.warn("sync failed, will retry", e);
+  }finally{
+    syncing = false; renderSyncBadge();
+  }
+}
+
+async function pushQueue(){
+  const q = queue();
+  if(!q.length) return;
+  const rows = q.map(x=>({
+    id:x.id, household_id:HOUSEHOLD, kind:x.kind,
+    data:x.data||{}, deleted:!!x.deleted,
+    updated_at:new Date(x.at).toISOString(), updated_by:USER.id
+  }));
+  const {error} = await sb.from("records").upsert(rows,{onConflict:"household_id,id"});
+  if(error) throw error;
+  // only clear what we actually sent — anything queued since stays
+  const sent = new Set(q.map(x=>x.kind+"|"+x.id+"|"+x.at));
+  set("_queue", queue().filter(x=>!sent.has(x.kind+"|"+x.id+"|"+x.at)));
+}
+
+async function pullChanges(){
+  const since = get("_since", "1970-01-01T00:00:00Z");
+  const {data, error} = await sb.from("records")
+    .select("id,kind,data,updated_at,deleted")
+    .eq("household_id", HOUSEHOLD)
+    .gt("updated_at", since)
+    .order("updated_at",{ascending:true});
+  if(error) throw error;
+  if(!data || !data.length) return;
+
+  const byKind = {};
+  Object.keys(SYNCED).forEach(c=>byKind[SYNCED[c]]=c);
+
+  data.forEach(row=>{
+    if(row.kind === "setting"){
+      const k = row.data && row.data.key;
+      if(k && SINGLETONS.includes(k)) set(k, row.data.value);
+      return;
+    }
+    const collection = byKind[row.kind];
+    if(!collection) return;
+    let list = get(collection, []);
+    const i = list.findIndex(x=>x.id===row.id);
+    if(row.deleted){
+      if(i>=0){ list.splice(i,1); set(collection, list); }
+      return;
+    }
+    if(i>=0) list[i] = row.data; else list.push(row.data);
+    set(collection, list);
+  });
+
+  set("_since", data[data.length-1].updated_at);
+  loadAll();          // refresh in-memory state
+  refreshAll();       // and the screen
+}
+
+function refreshAll(){
+  try{
+    renderHome();
+    const tab=document.querySelector(".tab.on");
+    if(tab){
+      const t=tab.dataset.tab;
+      if(t==="clients")renderClients();
+      if(t==="cal")renderCal();
+      if(t==="money")renderMoney();
+      if(t==="set")renderSet();
+    }
+  }catch(e){}
+}
+
+addEventListener("online", ()=>{ online=true; renderSyncBadge(); scheduleSync(200); });
+addEventListener("offline",()=>{ online=false; renderSyncBadge(); });
+document.addEventListener("visibilitychange",()=>{ if(!document.hidden) scheduleSync(300); });
+setInterval(()=>scheduleSync(0), 60000);   // a quiet check every minute
+
+// ── the little status pill in the header ──────────────────────────────
+function renderSyncBadge(){
+  const el=document.getElementById("sync-badge");
+  if(!el) return;
+  if(!cloudOn()){ el.style.display="none"; return; }
+  el.style.display="";
+  const pending = queue().length;
+  if(!USER){ el.className="sync off"; el.textContent="Sign in"; return; }
+  if(!navigator.onLine){ el.className="sync off"; el.textContent=pending?pending+" waiting":"Offline"; return; }
+  if(syncing){ el.className="sync busy"; el.textContent="Syncing"; return; }
+  if(pending){ el.className="sync busy"; el.textContent=pending+" to send"; return; }
+  el.className="sync ok"; el.textContent="Synced";
+}
 
 // ── state ──────────────────────────────────────────────────────────────
 let clients=[], dogs=[], bookings=[], expenses=[], trips=[], settings={}, biz={};
@@ -667,16 +843,21 @@ function addClient(existing){
     };
     if(existing) clients=clients.map(c=>c.id===rec.id?rec:c);
     else clients.push(rec);
-    set("clients",clients); closeSheet(); renderClients(); renderHome();
+    set("clients",clients); touch("clients",rec); closeSheet(); renderClients(); renderHome();
     toast(existing?"Client updated":name+" added");
   });
   const del=document.getElementById("f-del");
   if(del) del.addEventListener("click",()=>{
     const n=bookings.filter(b=>b.clientId===existing.id).length;
     if(!confirm("Delete "+existing.name+"?"+(n?" This also removes "+n+" booking"+(n===1?"":"s")+" and their dogs.":" This also removes their dogs.")))return;
+    const goneDogs=dogs.filter(d=>d.clientId===existing.id);
+    const goneBk=bookings.filter(b=>b.clientId===existing.id);
     clients=clients.filter(c=>c.id!==existing.id);
     dogs=dogs.filter(d=>d.clientId!==existing.id);
     bookings=bookings.filter(b=>b.clientId!==existing.id);
+    touch("clients",existing,true);
+    goneDogs.forEach(d=>touch("dogs",d,true));
+    goneBk.forEach(b=>touch("bookings",b,true));
     set("clients",clients);set("dogs",dogs);set("bookings",bookings);
     closeSheet(); renderClients(); renderHome(); toast("Deleted");
   });
@@ -771,14 +952,15 @@ function addDog(d,clientId){
       vet:document.getElementById("d-vet").value.trim(),
       notes:document.getElementById("d-notes").value.trim()};
     if(d.id) dogs=dogs.map(x=>x.id===rec.id?rec:x); else dogs.push(rec);
-    set("dogs",dogs); showClient(cid); toast(d.id?"Saved":name+" added");
+    set("dogs",dogs); touch("dogs",rec); showClient(cid); toast(d.id?"Saved":name+" added");
   });
   const del=document.getElementById("d-del");
   if(del) del.addEventListener("click",()=>{
     if(!confirm("Delete "+d.name+"?"))return;
     dogs=dogs.filter(x=>x.id!==d.id);
     bookings=bookings.map(b=>({...b,dogIds:(b.dogIds||[]).filter(i=>i!==d.id)}));
-    set("dogs",dogs);set("bookings",bookings);showClient(cid);toast("Deleted");
+    set("dogs",dogs);set("bookings",bookings);
+    touch("dogs",d,true); bookings.forEach(b=>touch("bookings",b));showClient(cid);toast("Deleted");
   });
 }
 
@@ -950,14 +1132,14 @@ function addBooking(b,clientId){
       notes:document.getElementById("b-notes").value.trim(),
       created:b.created||today(),cancelled:!!b.cancelled};
     if(b.id) bookings=bookings.map(x=>x.id===rec.id?rec:x); else bookings.push(rec);
-    set("bookings",bookings); closeSheet();
+    set("bookings",bookings); touch("bookings",rec); closeSheet();
     renderHome(); renderClients(); renderCal(); renderMoney();
     toast(b.id?"Booking saved":"Booking added");
   });
   const del=document.getElementById("b-del");
   if(del) del.addEventListener("click",()=>{
     if(!confirm("Delete this booking?"))return;
-    bookings=bookings.filter(x=>x.id!==b.id); set("bookings",bookings);
+    bookings=bookings.filter(x=>x.id!==b.id); set("bookings",bookings); touch("bookings",b,true);
     closeSheet(); renderHome(); renderCal(); renderMoney(); toast("Deleted");
   });
 }
@@ -987,7 +1169,7 @@ function showBooking(id){
   openSheet(sv.n,h);
   document.getElementById("bk-edit").addEventListener("click",()=>addBooking(b));
   document.getElementById("bk-paid").addEventListener("click",()=>{
-    b.paid=!b.paid; bookings=bookings.map(x=>x.id===b.id?b:x); set("bookings",bookings);
+    b.paid=!b.paid; bookings=bookings.map(x=>x.id===b.id?b:x); set("bookings",bookings); touch("bookings",b);
     closeSheet(); renderHome(); renderMoney(); toast(b.paid?"Marked paid":"Marked unpaid");
   });
   const inv=document.getElementById("bk-inv");
@@ -1053,7 +1235,7 @@ function makeInvoice(b){
     else toast("Sharing isn't supported here \u2014 use Copy");
   });
   document.getElementById("inv-paid").addEventListener("click",()=>{
-    b.paid=true; bookings=bookings.map(x=>x.id===b.id?b:x); set("bookings",bookings);
+    b.paid=true; bookings=bookings.map(x=>x.id===b.id?b:x); set("bookings",bookings); touch("bookings",b);
     closeSheet(); renderHome(); renderMoney(); toast("Marked paid");
   });
 }
@@ -1207,11 +1389,11 @@ function addExpense(e){
       date:document.getElementById("e-date").value||today(),
       note:document.getElementById("e-note").value.trim()};
     if(e.id) expenses=expenses.map(x=>x.id===rec.id?rec:x); else expenses.push(rec);
-    set("expenses",expenses); closeSheet(); renderMoney(); toast("Saved");
+    set("expenses",expenses); touch("expenses",rec); closeSheet(); renderMoney(); toast("Saved");
   });
   const d=document.getElementById("e-del");
   if(d) d.addEventListener("click",()=>{
-    expenses=expenses.filter(x=>x.id!==e.id); set("expenses",expenses);
+    expenses=expenses.filter(x=>x.id!==e.id); set("expenses",expenses); touch("expenses",e,true);
     closeSheet(); renderMoney(); toast("Deleted")});
 }
 function addTrip(t){
@@ -1228,11 +1410,11 @@ function addTrip(t){
     const rec={id:t.id||uid("t"),miles:mi,date:document.getElementById("t-date").value||today(),
       purpose:document.getElementById("t-purp").value.trim()};
     if(t.id) trips=trips.map(x=>x.id===rec.id?rec:x); else trips.push(rec);
-    set("trips",trips); closeSheet(); renderMoney(); toast("Saved");
+    set("trips",trips); touch("trips",rec); closeSheet(); renderMoney(); toast("Saved");
   });
   const d=document.getElementById("t-del");
   if(d) d.addEventListener("click",()=>{
-    trips=trips.filter(x=>x.id!==t.id); set("trips",trips);
+    trips=trips.filter(x=>x.id!==t.id); set("trips",trips); touch("trips",t,true);
     closeSheet(); renderMoney(); toast("Deleted")});
 }
 document.getElementById("add-exp-btn").addEventListener("click",()=>addExpense());
@@ -1284,7 +1466,7 @@ function renderCare(){
     const id=btn.dataset.dog, task=btn.dataset.task;
     if(!all[t][id]) all[t][id]={};
     all[t][id][task]=!all[t][id][task];
-    set("care",all);
+    set("care",all); touchSingleton("care");
     btn.classList.toggle("on", all[t][id][task]);
   }));
 }
@@ -1405,7 +1587,168 @@ function snooze(id){
   const s=get("snoozed",{});
   const until=new Date(); until.setDate(until.getDate()+30);
   s[id]=until.toISOString().split("T")[0];
-  set("snoozed",s);
+  set("snoozed",s); touchSingleton("snoozed");
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════
+//  ACCOUNTS — separate logins, one shared household
+// ═══════════════════════════════════════════════════════════════════════
+async function initCloud(){
+  if(!cloudOn()) return;
+  try{
+    const {data:{session}} = await sb.auth.getSession();
+    if(session && session.user){
+      USER = session.user;
+      await loadHousehold();
+    }
+  }catch(e){ console.warn("auth check failed", e); }
+  renderSyncBadge();
+  if(USER && HOUSEHOLD) scheduleSync(400);
+}
+
+async function loadHousehold(){
+  const {data, error} = await sb.from("members")
+    .select("household_id, households(name, join_code)").limit(1);
+  if(error || !data || !data.length){ HOUSEHOLD=null; return; }
+  HOUSEHOLD = data[0].household_id;
+  set("_household", {id:HOUSEHOLD,
+    name:data[0].households ? data[0].households.name : "",
+    code:data[0].households ? data[0].households.join_code : ""});
+}
+
+function accountSheet(){
+  if(!cloudOn()){
+    openSheet("Cloud sync",
+      '<div class="empty">Sync isn\'t set up yet.<br><br>'+
+      'Add your Supabase URL and key near the top of index.html, '+
+      'then reload. Until then everything is saved on this device.</div>');
+    return;
+  }
+  if(!USER){ signInSheet(); return; }
+  const hh = get("_household",{});
+  const pending = queue().length;
+  openSheet("Account",
+    '<div class="card" style="margin-bottom:12px">'+
+      '<div class="drow"><span class="drow-l">Signed in</span><span class="drow-v">'+esc(USER.email||"")+'</span></div>'+
+      '<div class="drow"><span class="drow-l">Business</span><span class="drow-v">'+esc(hh.name||"—")+'</span></div>'+
+      '<div class="drow"><span class="drow-l">Join code</span><span class="drow-v" style="font-family:ui-monospace,monospace;letter-spacing:.1em">'+esc(hh.code||"—")+'</span></div>'+
+      '<div class="drow"><span class="drow-l">Waiting to send</span><span class="drow-v">'+pending+'</span></div>'+
+      '<div class="drow"><span class="drow-l">Last sync</span><span class="drow-v">'+
+        (lastSync?new Date(lastSync).toLocaleTimeString():"—")+'</span></div>'+
+    '</div>'+
+    (hh.code?'<div class="note">Share the join code with your brother. He signs up on his own phone, taps <b>Join a business</b> and enters it — you then both see the same clients and bookings.</div>':'')+
+    '<button class="btn" id="ac-sync" style="margin-top:12px">Sync now</button>'+
+    '<button class="btn ghost" id="ac-out" style="margin-top:8px">Sign out</button>');
+  document.getElementById("ac-sync").addEventListener("click",async()=>{
+    toast("Syncing…"); await syncNow(); toast("Up to date"); accountSheet();
+  });
+  document.getElementById("ac-out").addEventListener("click",async()=>{
+    if(!confirm("Sign out? Your data stays on this device."))return;
+    await sb.auth.signOut(); USER=null; HOUSEHOLD=null;
+    closeSheet(); renderSyncBadge(); toast("Signed out");
+  });
+}
+
+function signInSheet(mode){
+  mode = mode || "in";
+  openSheet(mode==="in"?"Sign in":"Create account",
+    '<label class="lbl">Your name</label><input class="in" id="au-name" placeholder="Dillon" '+
+      (mode==="in"?'style="display:none"':'')+'/>'+
+    '<label class="lbl">Email</label><input class="in" type="email" id="au-email" autocomplete="email"/>'+
+    '<label class="lbl">Password</label><input class="in" type="password" id="au-pass" autocomplete="current-password"/>'+
+    '<div class="err" id="au-err"></div>'+
+    '<button class="btn" id="au-go">'+(mode==="in"?"Sign in":"Create account")+'</button>'+
+    '<button class="btn ghost" id="au-swap" style="margin-top:8px">'+
+      (mode==="in"?"I need an account":"I already have an account")+'</button>');
+
+  document.getElementById("au-swap").addEventListener("click",()=>
+    signInSheet(mode==="in"?"up":"in"));
+
+  document.getElementById("au-go").addEventListener("click",async()=>{
+    const err=document.getElementById("au-err"); err.textContent="";
+    const email=document.getElementById("au-email").value.trim();
+    const pass=document.getElementById("au-pass").value;
+    const name=(document.getElementById("au-name")||{}).value||"";
+    if(!email||!pass){ err.textContent="Email and password are both needed."; return; }
+    if(pass.length<6){ err.textContent="Password needs at least 6 characters."; return; }
+    try{
+      const fn = mode==="in" ? sb.auth.signInWithPassword({email,password:pass})
+                             : sb.auth.signUp({email,password:pass});
+      const {data,error} = await fn;
+      if(error) throw error;
+      if(!data.user){ err.textContent="Check your email to confirm, then sign in."; return; }
+      USER = data.user;
+      await loadHousehold();
+      closeSheet();
+      renderSyncBadge();
+      if(!HOUSEHOLD) householdSheet(name);
+      else { toast("Signed in"); scheduleSync(200); }
+    }catch(e){
+      err.textContent = (e && e.message) ? e.message : "That didn't work.";
+    }
+  });
+}
+
+function householdSheet(name){
+  openSheet("Set up your business",
+    '<div class="note" style="margin-bottom:14px">If your brother has already set this up, '+
+    'ask him for the join code. Otherwise start a new one.</div>'+
+    '<label class="lbl">Business name</label>'+
+    '<input class="in" id="hh-name" value="'+esc((get("biz",{})||{}).name||"Dillon Dog Sitting")+'"/>'+
+    '<button class="btn" id="hh-new" style="margin-top:12px">Start a new business</button>'+
+    '<div class="divider" style="margin:18px 0"></div>'+
+    '<label class="lbl">Or join with a code</label>'+
+    '<input class="in" id="hh-code" placeholder="ABC123" style="text-transform:uppercase"/>'+
+    '<div class="err" id="hh-err"></div>'+
+    '<button class="btn ghost" id="hh-join">Join a business</button>');
+
+  document.getElementById("hh-new").addEventListener("click",async()=>{
+    const err=document.getElementById("hh-err"); err.textContent="";
+    try{
+      const {data,error}=await sb.rpc("create_household",
+        {hname:document.getElementById("hh-name").value.trim()||"My business", display_name:name||null});
+      if(error) throw error;
+      const row=Array.isArray(data)?data[0]:data;
+      HOUSEHOLD=row.id;
+      set("_household",{id:row.id,name:document.getElementById("hh-name").value.trim(),code:row.join_code});
+      closeSheet(); renderSyncBadge();
+      await uploadEverything();
+      toast("Business created");
+      accountSheet();
+    }catch(e){ err.textContent=(e&&e.message)||"Couldn't create it."; }
+  });
+
+  document.getElementById("hh-join").addEventListener("click",async()=>{
+    const err=document.getElementById("hh-err"); err.textContent="";
+    const code=document.getElementById("hh-code").value.trim().toUpperCase();
+    if(!code){ err.textContent="Enter the code."; return; }
+    try{
+      const {data,error}=await sb.rpc("join_household",{code, display_name:name||null});
+      if(error) throw error;
+      HOUSEHOLD=data;
+      await loadHousehold();
+      closeSheet(); renderSyncBadge();
+      set("_since","1970-01-01T00:00:00Z");
+      await syncNow();
+      toast("Joined — pulling data");
+    }catch(e){ err.textContent=(e&&e.message)||"That code didn't work."; }
+  });
+}
+
+// first upload: push everything already on this device
+async function uploadEverything(){
+  if(!cloudOn()||!HOUSEHOLD) return;
+  Object.keys(SYNCED).forEach(c=>{
+    (get(c,[])||[]).forEach(rec=>{
+      if(rec && rec.id) enqueue(SYNCED[c], rec.id, rec, false);
+    });
+  });
+  SINGLETONS.forEach(k=>{
+    const v=get(k,null);
+    if(v!==null && v!==undefined) enqueue("setting", k, {key:k, value:v}, false);
+  });
+  await syncNow();
 }
 
 // ── SETTINGS ───────────────────────────────────────────────────────────
@@ -1422,6 +1765,16 @@ function renderSet(){
   document.getElementById("s-contact").value=biz.contact||"";
   document.getElementById("s-pay").value=biz.pay||"";
   document.getElementById("build-tag").textContent=BUILD;
+  const si=document.getElementById("sync-info");
+  if(si){
+    if(!cloudOn()) si.textContent="Saved on this device only. Add your Supabase keys to sync between phones.";
+    else if(!USER) si.textContent="Sign in to sync with your brother's phone.";
+    else {
+      const hh=get("_household",{});
+      si.innerHTML="Signed in as "+esc(USER.email||"")+"<br>Business: "+esc(hh.name||"—")+
+        " · code <b>"+esc(hh.code||"—")+"</b>";
+    }
+  }
   document.getElementById("db-info").innerHTML=
     clients.length+" clients · "+dogs.length+" dogs · "+bookings.length+" bookings<br>"+
     "Saved on this device. Last change "+(DB.__u?new Date(DB.__u).toLocaleString():"—");
@@ -1436,17 +1789,23 @@ document.getElementById("save-set").addEventListener("click",()=>{
     day:+document.getElementById("r-day").value||0,
     cut:cut, mile:+document.getElementById("r-mile").value||0,
     capacity:Math.max(1,+document.getElementById("r-cap").value||6)};
-  set("settings",settings); renderMoney(); renderHome(); toast("Settings saved");
+  set("settings",settings); touchSingleton("settings"); renderMoney(); renderHome(); toast("Settings saved");
 });
 document.getElementById("save-biz").addEventListener("click",()=>{
   biz={name:document.getElementById("s-biz").value.trim(),
        contact:document.getElementById("s-contact").value.trim(),
        pay:document.getElementById("s-pay").value.trim()};
-  set("biz",biz);
+  set("biz",biz); touchSingleton("biz");
   const nEl=document.getElementById("biz-name");
   if(nEl) nEl.textContent=biz.name||"Pack";
   toast("Saved");
 });
+(function(){
+  const a=document.getElementById("acct-btn");
+  if(a) a.addEventListener("click",accountSheet);
+  const s=document.getElementById("sync-badge");
+  if(s) s.addEventListener("click",accountSheet);
+})();
 document.getElementById("exp-btn").addEventListener("click",()=>{
   try{
     const blob=new Blob([JSON.stringify({...DB,__exported:new Date().toISOString()},null,2)],
@@ -1492,6 +1851,7 @@ document.getElementById("fab").addEventListener("click",()=>{
   try{
     loadAll();
     renderHome(); renderCal(); renderSet();
+    initCloud();
     const n=clients.length+bookings.length;
     const nameEl=document.getElementById("biz-name");
     if(nameEl) nameEl.textContent = biz.name || "Pack";
